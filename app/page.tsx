@@ -1,10 +1,22 @@
+'use client';
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Progress } from "@/components/ui/progress"
 import { Upload, FileText, Download, Shield, CheckCircle, Star, Users, CreditCard, Smartphone } from "lucide-react"
+import Auth from '../components/Auth'
+import { useUser } from '../components/UserProvider'
+import AuthModal from '../components/AuthModal'
+import { useState } from 'react'
+import Image from 'next/image'
 
 export default function LandingPage() {
+  const { user, signOut } = useUser();
+  const [authOpen, setAuthOpen] = useState(false);
+
+  // Function to handle successful sign in
+  const handleAuthSuccess = () => setAuthOpen(false);
+
   return (
     <div className="min-h-screen bg-white">
       {/* Navigation */}
@@ -25,9 +37,19 @@ export default function LandingPage() {
               <a href="#how-it-works" className="text-gray-600 hover:text-blue-600 transition-colors">
                 How It Works
               </a>
-              <Button variant="outline" size="sm">
-                Sign In
-              </Button>
+              {user ? (
+                <div className="flex items-center space-x-3">
+                  <Image src={user.avatar_url || '/placeholder-user.jpg'} alt="avatar" width={32} height={32} style={{ borderRadius: '50%' }} />
+                  <span className="text-gray-800 font-medium">{user.user_metadata?.username || 'User'}</span>
+                  <Button variant="outline" size="sm" onClick={signOut}>
+                    Sign Out
+                  </Button>
+                </div>
+              ) : (
+                <Button variant="outline" size="sm" onClick={() => setAuthOpen(true)}>
+                  Sign In
+                </Button>
+              )}
             </div>
           </div>
         </div>
@@ -472,6 +494,16 @@ export default function LandingPage() {
           </div>
         </div>
       </footer>
+
+      {/* Footer or end of main landing content */}
+      <footer className="py-8 bg-gray-100 mt-16">
+        <div className="container mx-auto px-4 text-center text-gray-500 text-sm">
+          &copy; {new Date().getFullYear()} LegalEase AI. All rights reserved.
+        </div>
+      </footer>
+
+      {/* Add AuthModal */}
+      <AuthModal open={authOpen} onClose={() => setAuthOpen(false)} onAuthSuccess={handleAuthSuccess} />
     </div>
   )
 }
