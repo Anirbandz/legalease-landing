@@ -2,10 +2,11 @@ import type { Metadata } from 'next'
 import './globals.css'
 import { UserProvider } from '../components/UserProvider'
 import { Button } from '../components/ui/button'
+import Head from 'next/head';
 
 export const metadata: Metadata = {
-  title: 'v0 App',
-  description: 'Created with v0',
+  title: 'LegalEase AI – AI Legal Document Summarizer India',
+  description: 'Upload contracts, NDAs, rental agreements and get instant AI summaries. Designed for Indian users. Free trial available.',
   generator: 'v0.dev',
 }
 
@@ -18,6 +19,13 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en">
+      <Head>
+        <meta name="viewport" content="width=device-width, initial-scale=1" />
+        <meta charSet="utf-8" />
+        <meta name="theme-color" content="#2563eb" />
+        <link rel="icon" href="/logo.svg" type="image/svg+xml" />
+        <link rel="icon" href="/logo.ico" sizes="any" />
+      </Head>
       <body>
         <UserProvider>
           {children}
