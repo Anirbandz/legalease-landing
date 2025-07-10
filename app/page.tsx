@@ -3,13 +3,15 @@ import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Progress } from "@/components/ui/progress"
-import { Upload, FileText, Download, Shield, CheckCircle, Star, Users, CreditCard, Smartphone } from "lucide-react"
+import { Upload, FileText, Download, Shield, CheckCircle, Star, Users, CreditCard, Smartphone, Loader2, AlertCircle, X, Lock } from "lucide-react"
 import Auth from '../components/Auth'
 import { useUser } from '../components/UserProvider'
 import AuthModal from '../components/AuthModal'
-import { useState } from 'react'
+import { useState, useCallback, useEffect } from 'react'
 import Image from 'next/image'
 import Footer from "../components/Footer";
+import { useDropzone } from 'react-dropzone';
+import { useToast } from "@/hooks/use-toast";
 import {
   Dialog,
   DialogTrigger,
@@ -22,16 +24,50 @@ import {
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import Head from 'next/head';
 import Link from 'next/link';
+import { supabase } from '../lib/supabaseClient';
 
 export default function LandingPage() {
   const { user, signOut } = useUser();
+  const { toast } = useToast();
   const [authOpen, setAuthOpen] = useState(false);
   const [pricingOpen, setPricingOpen] = useState(false);
   const [billing, setBilling] = useState<'month' | 'year'>('month');
   const [selectedPlan, setSelectedPlan] = useState<'basic' | 'pro' | 'enterprise' | null>(null);
+  
+  // Upload states
+  const [uploadedFile, setUploadedFile] = useState<File | null>(null);
+  const [documentText, setDocumentText] = useState<string>('');
+  const [isUploading, setIsUploading] = useState(false);
+  const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const [isDownloading, setIsDownloading] = useState(false);
+  const [analysis, setAnalysis] = useState<any>(null);
+  const [userPlan, setUserPlan] = useState<'trial' | 'basic' | 'pro' | 'enterprise'>('trial');
+  const [analysisCount, setAnalysisCount] = useState(0);
+  const [trialCompleted, setTrialCompleted] = useState(false);
 
   // Function to handle successful sign in
   const handleAuthSuccess = () => setAuthOpen(false);
+
+  useEffect(() => {
+    const fetchUserTrialState = async () => {
+      if (!user) return;
+      try {
+        const { data, error } = await supabase
+          .from('user_analyses')
+          .select('analysis_count, plan_type')
+          .eq('user_id', user.id)
+          .single();
+        if (!error && data) {
+          setAnalysisCount(data.analysis_count || 0);
+          setUserPlan(data.plan_type || 'trial');
+          setTrialCompleted((data.plan_type === 'trial' && (data.analysis_count || 0) >= 1));
+        }
+      } catch (err) {
+        // fallback: do nothing
+      }
+    };
+    fetchUserTrialState();
+  }, [user]);
 
   function handleFreeTrialClick() {
     if (!user) {
@@ -43,6 +79,257 @@ export default function LandingPage() {
       }
     }
   }
+
+  // Upload functionality
+  const onDrop = useCallback(async (acceptedFiles: File[]) => {
+    if (!user) {
+      setAuthOpen(true);
+      return;
+    }
+
+    // if (trialCompleted && userPlan === 'trial') {
+    //   toast({
+    //     title: "Trial completed",
+    //     description: "Please upgrade to Pro to continue analyzing documents.",
+    //     variant: "destructive",
+    //   });
+    //   return;
+    // }
+
+    const file = acceptedFiles[0];
+    if (!file) return;
+
+    if (!file.type.includes('pdf')) {
+      toast({
+        title: "Invalid file type",
+        description: "Please upload a PDF file.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    if (file.size > 10 * 1024 * 1024) {
+      toast({
+        title: "File too large",
+        description: "Please upload a file smaller than 10MB.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setUploadedFile(file);
+    setIsUploading(true);
+
+    try {
+      const formData = new FormData();
+      formData.append('file', file);
+      formData.append('userId', user.id);
+
+      const response = await fetch('/api/upload', {
+        method: 'POST',
+        body: formData,
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error || 'Upload failed');
+      }
+
+      setDocumentText(data.documentText);
+      toast({
+        title: "Upload successful",
+        description: "Document uploaded successfully. You can now analyze it.",
+      });
+    } catch (error) {
+      console.error('Upload error:', error);
+      toast({
+        title: "Upload failed",
+        description: error instanceof Error ? error.message : "Failed to upload document",
+        variant: "destructive",
+      });
+      setUploadedFile(null);
+    } finally {
+      setIsUploading(false);
+    }
+  }, [user, toast]);
+
+  const { getRootProps, getInputProps, isDragActive } = useDropzone({
+    onDrop,
+    accept: {
+      'application/pdf': ['.pdf']
+    },
+    multiple: false
+  });
+
+  const handleAnalyze = async () => {
+    if (!user) {
+      setAuthOpen(true);
+      return;
+    }
+
+    if (!documentText) {
+      toast({
+        title: "No document",
+        description: "Please upload a document first.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setIsAnalyzing(true);
+
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const token = session?.access_token;
+
+      const response = await fetch('/api/analyze', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { 'Authorization': `Bearer ${token}` } : {}),
+        },
+        body: JSON.stringify({
+          documentText,
+          userId: user.id,
+          userPlan,
+        }),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        if (data.requiresUpgrade) {
+          setTrialCompleted(true);
+          setAnalysisCount(1);
+          toast({
+            title: "Trial completed",
+            description: "You've used your free analysis. Please upgrade to continue.",
+            variant: "destructive",
+          });
+          return;
+        }
+        throw new Error(data.error || 'Analysis failed');
+      }
+
+      setAnalysis(data.analysis);
+      setAnalysisCount(prev => prev + 1);
+      
+      // Check if this was the first analysis (trial completion)
+      if (userPlan === 'trial' && analysisCount === 0) {
+        setTrialCompleted(true);
+        toast({
+          title: "Trial completed",
+          description: "You've used your free analysis. Upgrade to Pro for unlimited analyses!",
+        });
+      } else {
+        toast({
+          title: "Analysis complete",
+          description: "Your document has been analyzed successfully.",
+        });
+      }
+    } catch (error) {
+      console.error('Analysis error:', error);
+      toast({
+        title: "Analysis failed",
+        description: error instanceof Error ? error.message : "Failed to analyze document",
+        variant: "destructive",
+      });
+    } finally {
+      setIsAnalyzing(false);
+    }
+  };
+
+  const clearDocument = () => {
+    setUploadedFile(null);
+    setDocumentText('');
+    setAnalysis(null);
+  };
+
+  const handleDownloadReport = async () => {
+    if (!analysis || !user) return;
+
+    setIsDownloading(true);
+
+    try {
+      // Create detailed report content
+      const reportContent = `LEGAL DOCUMENT ANALYSIS REPORT
+Generated on: ${new Date().toLocaleDateString()}
+Document: ${uploadedFile?.name || 'Unknown Document'}
+
+================================================================================
+DOCUMENT SUMMARY
+================================================================================
+
+${analysis.summary}
+
+================================================================================
+RISK ASSESSMENT
+================================================================================
+
+${analysis.risks}
+
+================================================================================
+DETAILED RECOMMENDATIONS
+================================================================================
+
+${analysis.recommendations}
+
+================================================================================
+WHAT THIS MEANS FOR YOU
+================================================================================
+
+This analysis helps you understand:
+• What type of document you're dealing with
+• Who the main parties are and their responsibilities
+• Key terms and conditions you should pay attention to
+• Potential risks that could affect you
+• Specific improvements you should consider
+
+================================================================================
+NEXT STEPS
+================================================================================
+
+1. Review the risk assessment carefully
+2. Consider implementing the recommendations
+3. Consult with a legal professional if you have concerns
+4. Keep this report for future reference
+
+================================================================================
+IMPORTANT DISCLAIMER
+================================================================================
+
+This analysis is provided for informational purposes only and should not be considered as legal advice. For professional legal guidance, please consult with a qualified attorney who can review your specific situation and provide tailored advice.
+
+Generated by LegalEase AI
+For professional legal advice, please consult with a qualified attorney.`;
+
+      // Create and download the file
+      const blob = new Blob([reportContent], { type: 'text/plain' });
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `legal-analysis-${uploadedFile?.name?.replace('.pdf', '') || 'document'}-${Date.now()}.txt`;
+      document.body.appendChild(a);
+      a.click();
+      window.URL.revokeObjectURL(url);
+      document.body.removeChild(a);
+
+      toast({
+        title: "Report downloaded",
+        description: "Detailed analysis report has been downloaded successfully.",
+      });
+    } catch (error) {
+      console.error('Download error:', error);
+      toast({
+        title: "Download failed",
+        description: "Failed to download the analysis report.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsDownloading(false);
+    }
+  };
 
   return (
     <>
@@ -62,7 +349,10 @@ export default function LandingPage() {
             <div className="flex justify-between items-center h-16">
               <div className="flex items-center space-x-2">
                 <Image src="/logo.svg" alt="LegalEase AI logo" width={56} height={56} />
-                <span className="text-xl font-bold text-gray-900">LegalEase AI</span>
+                <span className="text-xl font-bold text-gray-900">
+                  LegalEase AI
+                  {userPlan === 'pro' && <span className="ml-2 px-2 py-0.5 bg-yellow-400 text-white text-xs rounded">Pro</span>}
+                </span>
               </div>
               <div className="hidden md:flex items-center space-x-8">
                 <a href="#features" className="text-gray-600 hover:text-blue-600 transition-colors">
@@ -106,9 +396,11 @@ export default function LandingPage() {
                   </p>
                 </div>
                 <div className="flex flex-col sm:flex-row gap-4">
-                  <Button size="lg" className="bg-blue-600 hover:bg-blue-700 text-white px-8 py-3" onClick={handleFreeTrialClick}>
-                    Try Free Trial
-                  </Button>
+                  {userPlan !== 'pro' && (
+                    <Button size="lg" className="bg-blue-600 hover:bg-blue-700 text-white px-8 py-3" onClick={handleFreeTrialClick}>
+                      Try Free Trial
+                    </Button>
+                  )}
                   <Button
                     variant="outline"
                     size="lg"
@@ -134,28 +426,228 @@ export default function LandingPage() {
                   <div className="space-y-4">
                     <div className="flex items-center justify-between">
                       <h3 className="font-semibold text-gray-900">Document Analysis</h3>
-                      <Badge variant="secondary" className="bg-green-100 text-green-800">
-                        Complete
-                      </Badge>
+                      {uploadedFile && (
+                        <Badge variant="secondary" className="bg-green-100 text-green-800">
+                          Uploaded
+                        </Badge>
+                      )}
                     </div>
-                    <div className="border-2 border-dashed border-gray-200 rounded-lg p-8 text-center">
-                      <Upload className="h-12 w-12 text-gray-400 mx-auto mb-4" />
-                      <p className="text-gray-600">Contract_NDA.pdf uploaded</p>
+                    
+                    {/* Upload Area */}
+                    <div
+                      {...getRootProps()}
+                      className={`border-2 border-dashed rounded-lg p-8 text-center cursor-pointer transition-colors ${
+                        isDragActive
+                          ? 'border-blue-500 bg-blue-50'
+                          : trialCompleted && userPlan === 'trial'
+                          ? 'border-red-300 bg-red-50 cursor-not-allowed'
+                          : 'border-gray-200 hover:border-gray-300'
+                      }`}
+                    >
+                      <input {...getInputProps()} />
+                      {isUploading ? (
+                        <div className="space-y-4">
+                          <Loader2 className="h-12 w-12 text-blue-600 mx-auto animate-spin" />
+                          <p className="text-gray-600">Uploading document...</p>
+                          <Progress value={50} className="w-full max-w-xs mx-auto" />
+                        </div>
+                      ) : uploadedFile ? (
+                        <div className="space-y-4">
+                          <CheckCircle className="h-12 w-12 text-green-600 mx-auto" />
+                          <p className="text-gray-900 font-medium">{uploadedFile.name}</p>
+                          <p className="text-sm text-gray-600">Document uploaded successfully</p>
+                          <Button variant="outline" size="sm" onClick={clearDocument}>
+                            <X className="h-4 w-4 mr-2" />
+                            Remove
+                          </Button>
+                        </div>
+                      ) : trialCompleted && userPlan === 'trial' ? (
+                        <div className="space-y-4">
+                          <Lock className="h-12 w-12 text-red-400 mx-auto" />
+                          <div>
+                            <p className="text-lg font-medium text-red-800">
+                              Trial completed - Upgrade required
+                            </p>
+                            <p className="text-sm text-red-600 mt-1">
+                              Click "Upgrade Now" to continue analyzing documents
+                            </p>
+                          </div>
+                          <Button
+                            onClick={() => window.location.href = '/pro'}
+                            className="bg-red-600 hover:bg-red-700 text-white"
+                          >
+                            Upgrade to Pro
+                          </Button>
+                        </div>
+                      ) : (
+                        <div className="space-y-4">
+                          <Upload className="h-12 w-12 text-gray-400 mx-auto" />
+                          <div>
+                            <p className="text-lg font-medium text-gray-900">
+                              {isDragActive ? 'Drop the PDF here' : 'Upload your legal document'}
+                            </p>
+                            <p className="text-sm text-gray-600 mt-1">
+                              Drag and drop a PDF file, or click to browse
+                            </p>
+                          </div>
+                          <p className="text-xs text-gray-500">
+                            Maximum file size: 10MB • PDF files only
+                          </p>
+                        </div>
+                      )}
                     </div>
-                    <div className="space-y-3">
-                      <div className="flex items-center space-x-2">
-                        <div className="w-2 h-2 bg-red-500 rounded-full"></div>
-                        <span className="text-sm text-gray-700">High Risk: Termination clause needs review</span>
+
+                    {/* Analyze Button */}
+                    {documentText && !analysis && !trialCompleted && (
+                      <div className="flex justify-center">
+                        <Button
+                          onClick={handleAnalyze}
+                          disabled={isAnalyzing}
+                          size="lg"
+                          className="px-8"
+                        >
+                          {isAnalyzing ? (
+                            <>
+                              <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                              Analyzing...
+                            </>
+                          ) : (
+                            <>
+                              <FileText className="h-4 w-4 mr-2" />
+                              Analyze Document
+                            </>
+                          )}
+                        </Button>
                       </div>
-                      <div className="flex items-center space-x-2">
-                        <div className="w-2 h-2 bg-yellow-500 rounded-full"></div>
-                        <span className="text-sm text-gray-700">Medium Risk: Payment terms unclear</span>
+                    )}
+
+                    {/* Trial Completed Message */}
+                    {documentText && !analysis && trialCompleted && userPlan === 'trial' && (
+                      <div className="flex justify-center">
+                        <div className="text-center p-4 bg-red-50 border border-red-200 rounded-lg">
+                          <Lock className="h-8 w-8 text-red-500 mx-auto mb-2" />
+                          <p className="text-red-800 font-medium">Trial completed</p>
+                          <p className="text-red-600 text-sm mb-3">Upgrade to Pro for unlimited analyses</p>
+                          <Button
+                            onClick={() => window.location.href = '/pro'}
+                            className="bg-red-600 hover:bg-red-700 text-white"
+                          >
+                            Upgrade to Pro
+                          </Button>
+                        </div>
                       </div>
-                      <div className="flex items-center space-x-2">
-                        <div className="w-2 h-2 bg-green-500 rounded-full"></div>
-                        <span className="text-sm text-gray-700">Low Risk: Standard confidentiality clause</span>
+                    )}
+
+                    {/* Analysis Results */}
+                    {analysis && (
+                      <div className="space-y-4">
+                        {/* Risk Level */}
+                        <div className="border rounded-lg p-6 bg-gradient-to-r from-gray-50 to-white shadow-sm">
+                          <div className="flex items-center justify-between mb-4">
+                            <h4 className="text-lg font-semibold text-gray-900 flex items-center">
+                              <AlertCircle className="h-5 w-5 mr-2 text-red-500" />
+                              Risk Assessment
+                            </h4>
+                            <div className="flex items-center space-x-2">
+                              {analysis.risks?.includes('HIGH') || analysis.risks?.includes('CRITICAL') ? (
+                                <div className="flex items-center space-x-2 bg-red-100 px-3 py-1 rounded-full">
+                                  <div className="w-3 h-3 bg-red-500 rounded-full animate-pulse"></div>
+                                  <span className="text-sm font-bold text-red-700">HIGH RISK</span>
+                                </div>
+                              ) : analysis.risks?.includes('MEDIUM') ? (
+                                <div className="flex items-center space-x-2 bg-yellow-100 px-3 py-1 rounded-full">
+                                  <div className="w-3 h-3 bg-yellow-500 rounded-full"></div>
+                                  <span className="text-sm font-bold text-yellow-700">MEDIUM RISK</span>
+                                </div>
+                              ) : (
+                                <div className="flex items-center space-x-2 bg-green-100 px-3 py-1 rounded-full">
+                                  <div className="w-3 h-3 bg-green-500 rounded-full"></div>
+                                  <span className="text-sm font-bold text-green-700">LOW RISK</span>
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                          <div className="bg-white rounded-lg p-4 border-l-4 border-red-500">
+                            <p className="text-sm text-gray-700 leading-relaxed">
+                              {analysis.risks?.split(':')[1] || analysis.risks || 'Risk assessment not available'}
+                            </p>
+                          </div>
+                        </div>
+
+                        {/* Summary */}
+                        <div className="border rounded-lg p-6 bg-gradient-to-r from-blue-50 to-white shadow-sm">
+                          <div className="flex items-center mb-4">
+                            <h4 className="text-lg font-semibold text-gray-900 flex items-center">
+                              <FileText className="h-5 w-5 mr-2 text-blue-500" />
+                              Document Summary
+                            </h4>
+                          </div>
+                          <div className="bg-white rounded-lg p-4 border-l-4 border-blue-500">
+                            <div className="text-sm text-gray-700 space-y-2">
+                              {analysis.summary?.split('.').filter((line: string) => line.trim()).map((line: string, index: number) => (
+                                <p key={index} className="leading-relaxed">
+                                  {line.trim()}.
+                                </p>
+                              ))}
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Recommendations */}
+                        <div className="border rounded-lg p-6 bg-gradient-to-r from-green-50 to-white shadow-sm">
+                          <div className="flex items-center mb-4">
+                            <h4 className="text-lg font-semibold text-gray-900 flex items-center">
+                              <CheckCircle className="h-5 w-5 mr-2 text-green-500" />
+                              Recommendations
+                            </h4>
+                          </div>
+                          <div className="bg-white rounded-lg p-4 border-l-4 border-green-500">
+                            <p className="text-sm text-gray-700 leading-relaxed">
+                              {analysis.recommendations || 'No specific recommendations available'}
+                            </p>
+                          </div>
+                        </div>
+
+                        {/* Download Report Button */}
+                        {userPlan === 'pro' && (
+                          <div className="flex justify-center pt-4">
+                            <Button
+                              onClick={handleDownloadReport}
+                              disabled={isDownloading}
+                              variant="outline"
+                              size="lg"
+                              className="bg-blue-50 border-blue-200 text-blue-700 hover:bg-blue-100"
+                            >
+                              {isDownloading ? (
+                                <>
+                                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                                  Downloading...
+                                </>
+                              ) : (
+                                <>
+                                  <Download className="h-4 w-4 mr-2" />
+                                  Download Detailed Report
+                                </>
+                              )}
+                            </Button>
+                          </div>
+                        )}
+                        {/* If not pro, show upgrade prompt below analysis */}
+                        {userPlan !== 'pro' && (
+                          <div className="flex justify-center pt-4">
+                            <Button
+                              onClick={() => window.location.href = '/pro'}
+                              variant="outline"
+                              size="lg"
+                              className="bg-yellow-50 border-yellow-200 text-yellow-700 hover:bg-yellow-100"
+                            >
+                              <Lock className="h-4 w-4 mr-2" />
+                              Upgrade to Pro to Download Report
+                            </Button>
+                          </div>
+                        )}
                       </div>
-                    </div>
+                    )}
                   </div>
                 </div>
               </div>
@@ -167,42 +659,93 @@ export default function LandingPage() {
         <section id="free-trial" className="py-16 bg-gray-50">
           <div className="container mx-auto px-4 sm:px-6 lg:px-8">
             <div className="text-center mb-12">
-              <h2 className="text-3xl font-bold text-gray-900 mb-4">What You Get in Free Trial</h2>
-              <p className="text-gray-600 max-w-2xl mx-auto">
-                Experience the power of AI legal analysis with our generous free trial
-              </p>
+              {userPlan === 'pro' ? (
+                <>
+                  <h2 className="text-3xl font-bold text-gray-900 mb-4">You are a Pro User!</h2>
+                  <p className="text-gray-600 max-w-2xl mx-auto">
+                    Enjoy unlimited document analyses, downloads, and premium features.
+                  </p>
+                </>
+              ) : (
+                <>
+                  <h2 className="text-3xl font-bold text-gray-900 mb-4">What You Get in Free Trial</h2>
+                  <p className="text-gray-600 max-w-2xl mx-auto">
+                    Experience the power of AI legal analysis with our generous free trial
+                  </p>
+                </>
+              )}
             </div>
             <div className="max-w-4xl mx-auto">
-              <Card className="p-8">
-                <div className="grid md:grid-cols-2 gap-8 items-center">
-                  <div className="space-y-6">
-                    <div className="flex items-center space-x-3">
-                      <CheckCircle className="h-5 w-5 text-green-500" />
-                      <span className="text-gray-700">1 free document check</span>
+              {userPlan === 'pro' ? (
+                <Card className="p-8 bg-gradient-to-r from-yellow-50 to-white border-yellow-300">
+                  <div className="grid md:grid-cols-2 gap-8 items-center">
+                    <div className="space-y-6">
+                      <div className="flex items-center space-x-3">
+                        <CheckCircle className="h-5 w-5 text-green-500" />
+                        <span className="text-gray-700">Unlimited document checks</span>
+                      </div>
+                      <div className="flex items-center space-x-3">
+                        <CheckCircle className="h-5 w-5 text-green-500" />
+                        <span className="text-gray-700">AI summary & full downloads</span>
+                      </div>
+                      <div className="flex items-center space-x-3">
+                        <CheckCircle className="h-5 w-5 text-green-500" />
+                        <span className="text-gray-700">Priority support</span>
+                      </div>
+                      <div className="flex items-center space-x-3">
+                        <CheckCircle className="h-5 w-5 text-green-500" />
+                        <span className="text-gray-700">Access to legal templates</span>
+                      </div>
                     </div>
-                    <div className="flex items-center space-x-3">
-                      <CheckCircle className="h-5 w-5 text-green-500" />
-                      <span className="text-gray-700">AI summary (read-only)</span>
-                    </div>
-                    <div className="flex items-center space-x-3">
-                      <div className="h-5 w-5 rounded-full border-2 border-gray-300"></div>
-                      <span className="text-gray-400">No document download</span>
-                    </div>
-                    <div className="flex items-center space-x-3">
-                      <div className="h-5 w-5 rounded-full border-2 border-gray-300"></div>
-                      <span className="text-gray-400">No legal consultation access</span>
+                    <div className="space-y-4 text-center">
+                      <span className="text-2xl font-bold text-yellow-600">Pro Plan Active</span>
+                      <p className="text-sm text-gray-500">Thank you for being a Pro user!</p>
                     </div>
                   </div>
-                  <div className="space-y-4">
-                    <div className="flex justify-between items-center">
-                      <span className="text-sm font-medium text-gray-700">Trial Progress</span>
-                      <span className="text-sm text-gray-500">0 of 1 used</span>
+                </Card>
+              ) : (
+                <Card className="p-8">
+                  <div className="grid md:grid-cols-2 gap-8 items-center">
+                    <div className="space-y-6">
+                      <div className="flex items-center space-x-3">
+                        <CheckCircle className="h-5 w-5 text-green-500" />
+                        <span className="text-gray-700">1 free document check</span>
+                      </div>
+                      <div className="flex items-center space-x-3">
+                        <CheckCircle className="h-5 w-5 text-green-500" />
+                        <span className="text-gray-700">AI summary (read-only)</span>
+                      </div>
+                      <div className="flex items-center space-x-3">
+                        <div className="h-5 w-5 rounded-full border-2 border-gray-300"></div>
+                        <span className="text-gray-400">No document download</span>
+                      </div>
+                      <div className="flex items-center space-x-3">
+                        <div className="h-5 w-5 rounded-full border-2 border-gray-300"></div>
+                        <span className="text-gray-400">No legal consultation access</span>
+                      </div>
                     </div>
-                    <Progress value={0} className="h-3" />
-                    <p className="text-sm text-gray-500">1 document check remaining</p>
+                    <div className="space-y-4">
+                      <div className="flex justify-between items-center">
+                        <span className="text-sm font-medium text-gray-700">Trial Progress</span>
+                        <span className="text-sm text-gray-500">{analysisCount} of 1 used</span>
+                      </div>
+                      <Progress value={analysisCount * 100} className="h-3" />
+                      <p className="text-sm text-gray-500">
+                        {trialCompleted ? (
+                          <span className="text-red-600 font-semibold">Trial completed! Upgrade to Pro for unlimited analyses.</span>
+                        ) : (
+                          `${1 - analysisCount} document check remaining`
+                        )}
+                      </p>
+                      {trialCompleted && (
+                        <Button className="mt-3 bg-red-600 hover:bg-red-700 text-white" onClick={() => window.location.href = '/pro'}>
+                          Upgrade to Pro
+                        </Button>
+                      )}
+                    </div>
                   </div>
-                </div>
-              </Card>
+                </Card>
+              )}
             </div>
           </div>
         </section>
@@ -489,14 +1032,16 @@ export default function LandingPage() {
               Join thousands of professionals who trust LegalEase AI to simplify their legal document review process.
             </p>
             <div className="flex flex-col sm:flex-row gap-4 justify-center">
-              <Button
-                size="lg"
-                variant="secondary"
-                className="px-8 py-3 bg-white text-blue-600 hover:bg-gray-100"
-                onClick={handleFreeTrialClick}
-              >
-                Try for Free
-              </Button>
+              {userPlan !== 'pro' && (
+                <Button
+                  size="lg"
+                  variant="secondary"
+                  className="px-8 py-3 bg-white text-blue-600 hover:bg-gray-100"
+                  onClick={handleFreeTrialClick}
+                >
+                  Try for Free
+                </Button>
+              )}
               <Button
                 size="lg"
                 variant="outline"
@@ -513,7 +1058,7 @@ export default function LandingPage() {
         </section>
 
         {/* Footer */}
-        <Footer current="home" />
+        <Footer userPlan={userPlan} />
         <AuthModal open={authOpen} onClose={() => setAuthOpen(false)} onAuthSuccess={handleAuthSuccess} />
         <Dialog open={pricingOpen} onOpenChange={setPricingOpen}>
           <DialogContent>

@@ -3,9 +3,10 @@ import Link from "next/link";
 
 interface FooterProps {
   current?: "contact" | "home" | "privacy" | "terms" | "about";
+  userPlan?: 'trial' | 'basic' | 'pro' | 'enterprise';
 }
 
-export default function Footer({ current }: FooterProps) {
+export default function Footer({ current, userPlan }: FooterProps) {
   return (
     <>
       <footer className="bg-gray-900 text-white py-12 mt-8">
@@ -14,7 +15,12 @@ export default function Footer({ current }: FooterProps) {
             <div className="space-y-4">
               <div className="flex items-center space-x-2">
                 <img src="/logo.svg" alt="LegalEase AI logo" className="h-6 w-6" />
-                <span className="text-lg font-bold">LegalEase AI</span>
+                <span className="text-lg font-bold">
+                  LegalEase AI
+                  {userPlan === 'pro' && (
+                    <span className="ml-2 px-2 py-0.5 bg-yellow-400 text-white text-xs rounded">Pro</span>
+                  )}
+                </span>
               </div>
               <p className="text-gray-400 text-sm">
                 Simplifying legal document analysis with AI-powered insights for Indian professionals.
