@@ -135,3 +135,57 @@ CREATE TRIGGER update_payment_orders_updated_at
 CREATE TRIGGER update_users_updated_at 
   BEFORE UPDATE ON users 
   FOR EACH ROW EXECUTE FUNCTION update_updated_at_column(); 
+
+-- Run this in Supabase SQL Editor
+-- Create users table with subscription fields
+CREATE TABLE IF NOT EXISTS users (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  email TEXT UNIQUE NOT NULL,
+  subscription_plan TEXT DEFAULT 'trial' CHECK (subscription_plan IN ('trial', 'pro')),
+  subscription_status TEXT DEFAULT 'inactive' CHECK (subscription_status IN ('active', 'inactive', 'cancelled')),
+  subscription_start_date TIMESTAMP WITH TIME ZONE,
+  subscription_end_date TIMESTAMP WITH TIME ZONE,
+  billing_cycle TEXT CHECK (billing_cycle IN ('month', 'year')),
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+-- Enable RLS
+ALTER TABLE users ENABLE ROW LEVEL SECURITY;
+
+-- Add policies
+CREATE POLICY "Users can view their own user data" ON users
+  FOR SELECT USING (auth.uid() = id);
+
+CREATE POLICY "Users can update their own user data" ON users
+  FOR UPDATE USING (auth.uid() = id);
+
+CREATE POLICY "Users can insert their own user data" ON users
+  FOR INSERT WITH CHECK (auth.uid() = id);
+
+-- Run this in Supabase SQL Editor
+-- Insert existing auth users into the users table
+INSERT INTO users (id, email, subscription_plan, subscription_status, created_at, updated_at)
+SELECT 
+  au.id,
+  au.email,
+  'trial' as subscription_plan,
+  'inactive' as subscription_status,
+  au.created_at,
+  au.updated_at
+FROM auth.users au
+WHERE au.email IS NOT NULL
+  AND au.email_confirmed_at IS NOT NULL
+  AND NOT EXISTS (
+    SELECT 1 FROM users u WHERE u.id = au.id
+  );
+
+-- Run this in Supabase SQL Editor
+ALTER TABLE user_analyses 
+ADD COLUMN IF NOT EXISTS pro_plan_type TEXT CHECK (pro_plan_type IN ('pro_monthly', 'pro_yearly'));
+
+ALTER TABLE user_analyses 
+ADD COLUMN IF NOT EXISTS period_start TEXT;
+
+ALTER TABLE user_analyses 
+ADD COLUMN IF NOT EXISTS period_count INTEGER DEFAULT 0; 
