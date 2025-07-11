@@ -32,6 +32,25 @@ export default function Auth({ onAuthSuccess }: { onAuthSuccess?: () => void }) 
         setError(signUpError.message);
         console.error('Sign up error:', signUpError.message);
       } else {
+        // Create user record in our database
+        if (data.user) {
+          try {
+            await fetch('/api/user/create', {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+              },
+              body: JSON.stringify({
+                userId: data.user.id,
+                email: data.user.email,
+                username: username,
+              }),
+            });
+          } catch (err) {
+            console.error('Error creating user record:', err);
+            // Continue anyway as the user is created in Supabase Auth
+          }
+        }
         alert('Check your email for a confirmation link!');
         if (onAuthSuccess) onAuthSuccess();
       }
@@ -48,11 +67,30 @@ export default function Auth({ onAuthSuccess }: { onAuthSuccess?: () => void }) 
     setError(null);
     console.log('Attempting sign in:', email);
     try {
-      const { error } = await supabase.auth.signInWithPassword({ email, password });
+      const { data, error } = await supabase.auth.signInWithPassword({ email, password });
       if (error) {
         setError(error.message);
         console.error('Sign in error:', error.message);
       } else {
+        // Ensure user record exists in our database
+        if (data.user) {
+          try {
+            await fetch('/api/user/create', {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+              },
+              body: JSON.stringify({
+                userId: data.user.id,
+                email: data.user.email,
+                username: data.user.user_metadata?.username || '',
+              }),
+            });
+          } catch (err) {
+            console.error('Error ensuring user record exists:', err);
+            // Continue anyway as the user is authenticated
+          }
+        }
         if (onAuthSuccess) onAuthSuccess();
       }
     } catch (err) {
