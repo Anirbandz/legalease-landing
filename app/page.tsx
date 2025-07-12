@@ -98,6 +98,14 @@ export default function LandingPage() {
     fetchUserSubscription();
   }, [user]);
 
+  // Debug: Log userSubscription and plan
+  useEffect(() => {
+    console.log('DEBUG userSubscription:', userSubscription);
+    if (userSubscription && userSubscription.subscription) {
+      console.log('DEBUG userSubscription.subscription.plan:', userSubscription.subscription.plan);
+    }
+  }, [userSubscription]);
+
   function handleFreeTrialClick() {
     if (!user) {
       setAuthOpen(true);
@@ -782,84 +790,86 @@ For professional legal advice, please consult with a qualified attorney.`;
         </section>
 
         {/* Pricing Plans */}
-        <section id="pricing" className="py-16 bg-white">
-          <div className="container mx-auto px-4 sm:px-6 lg:px-8">
-            <div className="text-center mb-12">
-              <h2 className="text-3xl font-bold text-gray-900 mb-4">Simple, Transparent Pricing</h2>
-              <p className="text-gray-600 max-w-2xl mx-auto">
-                Choose the plan that works best for your legal document needs
-              </p>
-            </div>
-            <div className="grid md:grid-cols-2 gap-8 max-w-4xl mx-auto">
-              <Card className="relative border-2 border-gray-200 hover:border-blue-300 transition-colors">
-                <CardHeader className="text-center pb-8">
-                  <CardTitle className="text-2xl font-bold text-gray-900">Monthly Plan</CardTitle>
-                  <div className="mt-4">
-                    <span className="text-4xl font-bold text-blue-600">₹99</span>
-                    <span className="text-gray-500">/month</span>
-                  </div>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                  <div className="flex items-center space-x-3">
-                    <CheckCircle className="h-5 w-5 text-green-500" />
-                    <span>{userPlan === 'trial' ? '30 document analysis' : 'Unlimited document analysis'}</span>
-                  </div>
-                  <div className="flex items-center space-x-3">
-                    <CheckCircle className="h-5 w-5 text-green-500" />
-                    <span>Full document downloads</span>
-                  </div>
-                  <div className="flex items-center space-x-3">
-                    <CheckCircle className="h-5 w-5 text-green-500" />
-                    <span>Advanced clause analysis</span>
-                  </div>
-                  <div className="flex items-center space-x-3">
-                    <CheckCircle className="h-5 w-5 text-green-500" />
-                    <span>Legal template access</span>
-                  </div>
-                  <Button className="w-full mt-6 bg-blue-600 hover:bg-blue-700" asChild>
-                    <Link href="/pro">Subscribe Now</Link>
-                  </Button>
-                </CardContent>
-              </Card>
+        {!isLoadingSubscription && userPlan !== 'pro' && (
+          <section id="pricing" className="py-16 bg-white">
+            <div className="container mx-auto px-4 sm:px-6 lg:px-8">
+              <div className="text-center mb-12">
+                <h2 className="text-3xl font-bold text-gray-900 mb-4">Simple, Transparent Pricing</h2>
+                <p className="text-gray-600 max-w-2xl mx-auto">
+                  Choose the plan that works best for your legal document needs
+                </p>
+              </div>
+              <div className="grid md:grid-cols-2 gap-8 max-w-4xl mx-auto">
+                <Card className="relative border-2 border-gray-200 hover:border-blue-300 transition-colors">
+                  <CardHeader className="text-center pb-8">
+                    <CardTitle className="text-2xl font-bold text-gray-900">Monthly Plan</CardTitle>
+                    <div className="mt-4">
+                      <span className="text-4xl font-bold text-blue-600">₹99</span>
+                      <span className="text-gray-500">/month</span>
+                    </div>
+                  </CardHeader>
+                  <CardContent className="space-y-4">
+                    <div className="flex items-center space-x-3">
+                      <CheckCircle className="h-5 w-5 text-green-500" />
+                      <span>{userPlan === 'trial' ? '30 document analysis' : 'Unlimited document analysis'}</span>
+                    </div>
+                    <div className="flex items-center space-x-3">
+                      <CheckCircle className="h-5 w-5 text-green-500" />
+                      <span>Full document downloads</span>
+                    </div>
+                    <div className="flex items-center space-x-3">
+                      <CheckCircle className="h-5 w-5 text-green-500" />
+                      <span>Advanced clause analysis</span>
+                    </div>
+                    <div className="flex items-center space-x-3">
+                      <CheckCircle className="h-5 w-5 text-green-500" />
+                      <span>Legal template access</span>
+                    </div>
+                    <Button className="w-full mt-6 bg-blue-600 hover:bg-blue-700" asChild>
+                      <Link href="/pro">Subscribe Now</Link>
+                    </Button>
+                  </CardContent>
+                </Card>
 
-              <Card className="relative border-2 border-blue-500 hover:border-blue-600 transition-colors">
-                <div className="absolute -top-4 left-1/2 transform -translate-x-1/2">
-                  <Badge className="bg-blue-600 text-white px-4 py-1">Save 50%</Badge>
-                </div>
-                <CardHeader className="text-center pb-8">
-                  <CardTitle className="text-2xl font-bold text-gray-900">Annual Plan</CardTitle>
-                  <div className="mt-4">
-                    <span className="text-4xl font-bold text-blue-600">₹999</span>
-                    <span className="text-gray-500">/year</span>
+                <Card className="relative border-2 border-blue-500 hover:border-blue-600 transition-colors">
+                  <div className="absolute -top-4 left-1/2 transform -translate-x-1/2">
+                    <Badge className="bg-blue-600 text-white px-4 py-1">Save 50%</Badge>
                   </div>
-                  <p className="text-sm text-gray-500 mt-2">₹83/month when billed annually</p>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                  <div className="flex items-center space-x-3">
-                    <CheckCircle className="h-5 w-5 text-green-500" />
-                    <span>{userPlan === 'trial' ? '4000 document analysis' : 'Everything in Monthly Plan'}</span>
-                  </div>
-                  <div className="flex items-center space-x-3">
-                    <CheckCircle className="h-5 w-5 text-green-500" />
-                    <span>Priority support</span>
-                  </div>
-                  <div className="flex items-center space-x-3">
-                    <CheckCircle className="h-5 w-5 text-green-500" />
-                    <span>Advanced legal insights</span>
-                  </div>
-                  <div className="flex items-center space-x-3">
-                    <CheckCircle className="h-5 w-5 text-green-500" />
-                    <span>Bulk document processing</span>
-                  </div>
-                  <Button className="w-full mt-6 bg-blue-600 hover:bg-blue-700" asChild>
-                    <Link href="/pro">Subscribe Now</Link>
-                  </Button>
-                </CardContent>
-              </Card>
+                  <CardHeader className="text-center pb-8">
+                    <CardTitle className="text-2xl font-bold text-gray-900">Annual Plan</CardTitle>
+                    <div className="mt-4">
+                      <span className="text-4xl font-bold text-blue-600">₹999</span>
+                      <span className="text-gray-500">/year</span>
+                    </div>
+                    <p className="text-sm text-gray-500 mt-2">₹83/month when billed annually</p>
+                  </CardHeader>
+                  <CardContent className="space-y-4">
+                    <div className="flex items-center space-x-3">
+                      <CheckCircle className="h-5 w-5 text-green-500" />
+                      <span>{userPlan === 'trial' ? '4000 document analysis' : 'Everything in Monthly Plan'}</span>
+                    </div>
+                    <div className="flex items-center space-x-3">
+                      <CheckCircle className="h-5 w-5 text-green-500" />
+                      <span>Priority support</span>
+                    </div>
+                    <div className="flex items-center space-x-3">
+                      <CheckCircle className="h-5 w-5 text-green-500" />
+                      <span>Advanced legal insights</span>
+                    </div>
+                    <div className="flex items-center space-x-3">
+                      <CheckCircle className="h-5 w-5 text-green-500" />
+                      <span>Bulk document processing</span>
+                    </div>
+                    <Button className="w-full mt-6 bg-blue-600 hover:bg-blue-700" asChild>
+                      <Link href="/pro">Subscribe Now</Link>
+                    </Button>
+                  </CardContent>
+                </Card>
+              </div>
+              <p className="text-center text-sm text-gray-500 mt-8">Secure payments via Razorpay • Cancel anytime</p>
             </div>
-            <p className="text-center text-sm text-gray-500 mt-8">Secure payments via Razorpay • Cancel anytime</p>
-          </div>
-        </section>
+          </section>
+        )}
 
         {/* How It Works */}
         <section id="how-it-works" className="py-16 bg-gray-50">
@@ -1056,14 +1066,14 @@ For professional legal advice, please consult with a qualified attorney.`;
         </section>
 
         {/* Call to Action */}
-        <section className="py-16 bg-blue-600">
-          <div className="container mx-auto px-4 sm:px-6 lg:px-8 text-center">
-            <h2 className="text-3xl font-bold text-white mb-4">Start Your Free Trial Now</h2>
-            <p className="text-blue-100 text-lg mb-8 max-w-2xl mx-auto">
-              Join thousands of professionals who trust LegalEase AI to simplify their legal document review process.
-            </p>
-            <div className="flex flex-col sm:flex-row gap-4 justify-center">
-              {userPlan !== 'pro' && (
+        {!isLoadingSubscription && userPlan !== 'pro' && (
+          <section className="py-16 bg-blue-600">
+            <div className="container mx-auto px-4 sm:px-6 lg:px-8 text-center">
+              <h2 className="text-3xl font-bold text-white mb-4">Start Your Free Trial Now</h2>
+              <p className="text-blue-100 text-lg mb-8 max-w-2xl mx-auto">
+                Join thousands of professionals who trust LegalEase AI to simplify their legal document review process.
+              </p>
+              <div className="flex flex-col sm:flex-row gap-4 justify-center">
                 <Button
                   size="lg"
                   variant="secondary"
@@ -1072,21 +1082,21 @@ For professional legal advice, please consult with a qualified attorney.`;
                 >
                   Try for Free
                 </Button>
-              )}
-              <Button
-                size="lg"
-                variant="outline"
-                className="px-8 py-3 border-white text-white hover:bg-white hover:text-blue-600 bg-transparent"
-                asChild
-              >
-                <Link href="/pro">Go Pro</Link>
-              </Button>
+                <Button
+                  size="lg"
+                  variant="outline"
+                  className="px-8 py-3 border-white text-white hover:bg-white hover:text-blue-600 bg-transparent"
+                  asChild
+                >
+                  <Link href="/pro">Go Pro</Link>
+                </Button>
+              </div>
+              <p className="text-blue-100 text-sm mt-4">
+                No credit card required • 1 free document check • Upgrade anytime
+              </p>
             </div>
-            <p className="text-blue-100 text-sm mt-4">
-              No credit card required • 1 free document check • Upgrade anytime
-            </p>
-          </div>
-        </section>
+          </section>
+        )}
 
         {/* Footer */}
         <Footer userPlan={userPlan} />

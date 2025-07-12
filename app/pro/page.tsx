@@ -17,6 +17,7 @@ export default function ProPage() {
   const [userSubscription, setUserSubscription] = useState<any>(null);
   const [isLoadingSubscription, setIsLoadingSubscription] = useState(true);
   const [userPlan, setUserPlan] = useState<'trial' | 'basic' | 'pro' | 'enterprise'>('trial');
+  const [proPlanType, setProPlanType] = useState<string | null>(null);
 
   const { user, signOut } = useUser();
   const [authOpen, setAuthOpen] = useState(false);
@@ -57,12 +58,13 @@ export default function ProPage() {
         // Fetch user plan type from user_analyses table
         const { data: userData, error } = await supabase
           .from('user_analyses')
-          .select('plan_type')
+          .select('plan_type, pro_plan_type')
           .eq('user_id', user.id)
           .single();
 
         if (!error && userData) {
           setUserPlan(userData.plan_type || 'trial');
+          setProPlanType(userData.pro_plan_type || null);
         }
       } catch (error) {
         console.error('Error fetching user data:', error);
@@ -263,9 +265,7 @@ export default function ProPage() {
               value="month" 
               aria-label="Monthly" 
               className={billing === 'month' ? 'bg-blue-600 text-white' : ''}
-              disabled={
-                user && userSubscription && userSubscription.subscription && userSubscription.subscription.plan === 'pro' && userSubscription.subscription.pro_plan_type === 'pro_monthly'
-              }
+              disabled={proPlanType === 'pro_yearly'}
             >
               Monthly
             </ToggleGroupItem>
@@ -273,9 +273,7 @@ export default function ProPage() {
               value="year" 
               aria-label="Yearly" 
               className={billing === 'year' ? 'bg-blue-600 text-white' : ''}
-              disabled={
-                user && userSubscription && userSubscription.subscription && userSubscription.subscription.plan === 'pro' && userSubscription.subscription.pro_plan_type === 'pro_yearly'
-              }
+              disabled={proPlanType === 'pro_yearly'}
             >
               Yearly
             </ToggleGroupItem>
@@ -292,24 +290,20 @@ export default function ProPage() {
                     <p className="text-sm text-gray-600">Loading subscription...</p>
                   </div>
                 </div>
-              ) : userSubscription && userSubscription.subscription ? (
+              ) : (
                 <div className="w-full mb-4 p-3 bg-blue-50 border border-blue-200 rounded-lg">
                   <p className="text-sm text-blue-800">
-                    <strong>Current Plan:</strong> {
-                      userSubscription.subscription.plan === 'pro' 
-                        ? (userSubscription.subscription.pro_plan_type === 'pro_yearly' ? 'Pro Yearly' : 'Pro Monthly')
-                        : 'Trial'
-                    }
+                    <strong>Current Plan:</strong> {userPlan.charAt(0).toUpperCase() + userPlan.slice(1)}
                   </p>
                 </div>
-              ) : null
+              )
             )}
 
             <h3 className="text-2xl font-bold mb-2 text-blue-600">Pro Plan</h3>
             <div className="mb-2 text-blue-600 font-bold text-4xl">₹{billing === 'month' ? '99' : '999'}</div>
             <div className="text-gray-500 mb-4 text-lg">per {billing}</div>
             <ul className="text-base text-gray-700 mb-6 space-y-2 text-left w-full">
-              <li>• {userPlan === 'trial' ? (billing === 'month' ? '30' : '4000') + ' document checks' : 'Unlimited document checks'}</li>
+              <li>• {billing === 'month' ? '30 document checks per month' : '4000 document checks per year'}</li>
               <li>• AI summary & risk detection</li>
               <li>• Downloadable reports</li>
               <li>• Priority support</li>
@@ -371,7 +365,7 @@ export default function ProPage() {
                   <Button 
                     className="w-full text-lg py-3 bg-blue-600 hover:bg-blue-700" 
                     onClick={() => handlePlanClick()}
-                    disabled={isProcessing || (userSubscription && userSubscription.subscription && userSubscription.subscription.plan === 'pro' && userSubscription.subscription.pro_plan_type === 'pro_yearly') || (userSubscription && userSubscription.subscription && userSubscription.subscription.plan === 'pro' && userSubscription.subscription.pro_plan_type === 'pro_monthly' && billing === 'month')}
+                    disabled={isProcessing || proPlanType === 'pro_yearly'}
                   >
                     {isProcessing ? (
                       <>
@@ -382,6 +376,11 @@ export default function ProPage() {
                       'Subscribe Now'
                     )}
                   </Button>
+                )}
+                {proPlanType === 'pro_yearly' && (
+                  <div className="w-full text-center p-2 mt-2 bg-green-50 border border-green-200 rounded-lg text-green-700 text-sm">
+                    You are already a Pro Yearly user.
+                  </div>
                 )}
               </>
             )}
