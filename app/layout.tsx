@@ -25,12 +25,30 @@ export default function RootLayout({
         <meta name="theme-color" content="#2563eb" />
         <link rel="icon" href="/logo.svg" type="image/svg+xml" />
         <link rel="icon" href="/logo.ico" sizes="any" />
+        <link rel="canonical" href="https://www.ease-ai.in/" />
+        {/* Twitter Card meta tags */}
+        <meta name="twitter:card" content="summary_large_image" />
+        <meta name="twitter:title" content="LegalEase AI – AI Legal Document Summarizer India" />
+        <meta name="twitter:description" content="Upload contracts, NDAs, rental agreements and get instant AI summaries. Designed for Indian users. Free trial available." />
+        <meta name="twitter:image" content="/og-image.png" />
+        {/* JSON-LD Structured Data for Organization */}
+        <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify({
+          '@context': 'https://schema.org',
+          '@type': 'Organization',
+          name: 'LegalEase AI',
+          url: 'https://www.ease-ai.in/',
+          logo: 'https://www.ease-ai.in/logo.svg',
+          description: 'AI-powered legal document summarizer for Indian users.'
+        }) }} />
       </head>
       <body>
-        <UserProvider>
-          {children}
-          <Toaster />
-        </UserProvider>
+        <header>{/* Navigation will be rendered by children */}</header>
+        <main>
+          <UserProvider>
+            {children}
+            <Toaster />
+          </UserProvider>
+        </main>
       </body>
     </html>
   )
