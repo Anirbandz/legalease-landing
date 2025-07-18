@@ -46,6 +46,7 @@ export default function LandingPage() {
   const [trialCompleted, setTrialCompleted] = useState(false);
   const [userSubscription, setUserSubscription] = useState<any>(null);
   const [isLoadingSubscription, setIsLoadingSubscription] = useState(true);
+  const [templateLoading, setTemplateLoading] = useState<string | null>(null);
 
   // Function to handle successful sign in
   const handleAuthSuccess = () => setAuthOpen(false);
@@ -365,6 +366,47 @@ For professional legal advice, please consult with a qualified attorney.`;
       });
     } finally {
       setIsDownloading(false);
+    }
+  };
+
+  // Download handler for templates
+  const handleTemplateDownload = async (template: 'nda' | 'contract' | 'partnership') => {
+    if (!user) {
+      setAuthOpen(true);
+      return;
+    }
+    setTemplateLoading(template);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const token = session?.access_token;
+      const res = await fetch(`/api/download/template?template=${template}`, {
+        method: 'GET',
+        headers: token ? { 'Authorization': `Bearer ${token}` } : {},
+      });
+      if (!res.ok) {
+        const err = await res.json();
+        throw new Error(err.error || 'Download failed');
+      }
+      const blob = await res.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download =
+        template === 'nda' ? 'NDA_Template.docx' :
+        template === 'contract' ? 'Contract_Template.docx' :
+        'Partnership_Template.docx';
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      window.URL.revokeObjectURL(url);
+    } catch (error: any) {
+      toast({
+        title: 'Download failed',
+        description: error.message || 'Could not download template',
+        variant: 'destructive',
+      });
+    } finally {
+      setTemplateLoading(null);
     }
   };
 
@@ -981,8 +1023,14 @@ For professional legal advice, please consult with a qualified attorney.`;
                 <p className="text-sm text-gray-600">
                   A comprehensive Non-Disclosure Agreement template for protecting confidential information.
                 </p>
-                <Button variant="outline" size="sm" className="mt-4 text-blue-600 hover:bg-blue-100">
-                  Download
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="mt-4 text-blue-600 hover:bg-blue-100"
+                  onClick={() => handleTemplateDownload('nda')}
+                  disabled={templateLoading === 'nda'}
+                >
+                  {templateLoading === 'nda' ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4 mr-2" />} Download
                 </Button>
               </Card>
               <Card className="p-6 hover:shadow-lg transition-shadow">
@@ -993,8 +1041,14 @@ For professional legal advice, please consult with a qualified attorney.`;
                 <p className="text-sm text-gray-600">
                   A customizable template for drafting standard business contracts.
                 </p>
-                <Button variant="outline" size="sm" className="mt-4 text-blue-600 hover:bg-blue-100">
-                  Download
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="mt-4 text-blue-600 hover:bg-blue-100"
+                  onClick={() => handleTemplateDownload('contract')}
+                  disabled={templateLoading === 'contract'}
+                >
+                  {templateLoading === 'contract' ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4 mr-2" />} Download
                 </Button>
               </Card>
               <Card className="p-6 hover:shadow-lg transition-shadow">
@@ -1005,8 +1059,14 @@ For professional legal advice, please consult with a qualified attorney.`;
                 <p className="text-sm text-gray-600">
                   A detailed template for establishing a partnership between two parties.
                 </p>
-                <Button variant="outline" size="sm" className="mt-4 text-blue-600 hover:bg-blue-100">
-                  Download
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="mt-4 text-blue-600 hover:bg-blue-100"
+                  onClick={() => handleTemplateDownload('partnership')}
+                  disabled={templateLoading === 'partnership'}
+                >
+                  {templateLoading === 'partnership' ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4 mr-2" />} Download
                 </Button>
               </Card>
             </div>
